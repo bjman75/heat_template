@@ -1,0 +1,320 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Demo 2",
+
+  "Parameters" : {
+    "KeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type": "String"
+    },
+
+    "InstanceType" : {
+      "Description" : "WebServer EC2 instance type",
+      "Type" : "String",
+      "Default" : "m1.small",
+      "AllowedValues" : [ "m1.tiny", "m1.small", "m1.medium", "m1.large", "m1.xlarge" ],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "DBName": {
+      "Default": "wordpress",
+      "Description": "The WordPress database name",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+
+    "DBUsername": {
+      "Default": "admin",
+      "NoEcho": "true",
+      "Description": "The WordPress database admin account username",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "16",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+
+    "DBPassword": {
+      "Default": "admin",
+      "NoEcho": "true",
+      "Description": "The WordPress database admin account password",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "41",
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "ConstraintDescription": "must contain only alphanumeric characters."
+    },
+
+    "DBRootPassword": {
+      "Default": "admin",
+      "NoEcho": "true",
+      "Description": "Root password for MySQL",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "41",
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "ConstraintDescription": "must contain only alphanumeric characters."
+    },
+
+    "LinuxDistribution": {
+      "Default": "F17",
+      "Description": "Distribution of choice",
+      "Type": "String",
+      "AllowedValues": [ "F18", "F17", "U10", "RHEL-6.1", "RHEL-6.2", "RHEL-6.3" ]
+    },
+
+    "ExternalRouterId" : {
+      "Description" : "Id of a router connected to the external network",
+      "Type" : "String",
+      "Default": "3a735c2e-309e-460c-89f3-e7777d093432"
+    }
+  },
+
+  "Mappings": {
+    "AWSInstanceType2Arch": {
+      "m1.tiny"    : { "Arch": "32" },
+      "m1.small"   : { "Arch": "64" },
+      "m1.medium"  : { "Arch": "64" },
+      "m1.large"   : { "Arch": "64" },
+      "m1.xlarge"  : { "Arch": "64" }
+    },
+
+    "DistroArch2AMI": {
+      "F18"     : { "32": "F18-i386-cfntools", "64": "F18-x86_64-cfntools" },
+      "F17"     : { "32": "F17-i386-cfntools", "64": "F17-x86_64-cfntools" },
+      "U10"     : { "32": "U10-i386-cfntools", "64": "U10-x86_64-cfntools" },
+      "RHEL-6.1": { "32": "rhel61-i386-cfntools", "64": "rhel61-x86_64-cfntools" },
+      "RHEL-6.2": { "32": "rhel62-i386-cfntools", "64": "rhel62-x86_64-cfntools" },
+      "RHEL-6.3": { "32": "rhel63-i386-cfntools", "64": "rhel63-x86_64-cfntools" }
+    }
+  },
+
+  "Resources" : {
+    "web_network": {
+      "Type": "OS::Quantum::Net",
+      "Properties": {
+        "name": "web_network"
+      }
+    },
+
+    "web_subnet": {
+      "Type": "OS::Quantum::Subnet",
+      "Properties": {
+        "network_id": { "Ref" : "web_network" },
+        "ip_version": 4,
+        "cidr": "10.0.1.0/24",
+        "dns_nameservers": ["8.8.8.8"],
+        "allocation_pools": [{"start": "10.0.1.20", "end": "10.0.1.150"}]
+      }
+    },
+
+    "app_network": {
+      "Type": "OS::Quantum::Net",
+      "Properties": {
+        "name": "app_network"
+      }
+    },
+
+    "app_subnet": {
+      "Type": "OS::Quantum::Subnet",
+      "Properties": {
+        "network_id": { "Ref" : "app_network" },
+        "ip_version": 4,
+        "cidr": "10.0.2.0/24",
+        "dns_nameservers": ["8.8.8.8"],
+        "allocation_pools": [{"start": "10.0.2.20", "end": "10.0.2.150"}]
+      }
+    },
+
+    "db_network": {
+      "Type": "OS::Quantum::Net",
+      "Properties": {
+        "name": "db_network"
+      }
+    },
+
+    "db_subnet": {
+      "Type": "OS::Quantum::Subnet",
+      "Properties": {
+        "network_id": { "Ref" : "db_network" },
+        "ip_version": 4,
+        "cidr": "10.0.3.0/24",
+        "dns_nameservers": ["8.8.8.8"],
+        "allocation_pools": [{"start": "10.0.3.20", "end": "10.0.3.150"}]
+      }
+    },
+    
+    "router_interface_1": {
+      "Type": "OS::Quantum::RouterInterface",
+      "Properties": {
+        "router_id": { "Ref" : "ExternalRouterId" },
+        "subnet_id": { "Ref" : "web_subnet" }
+      }
+    },
+
+    "router_interface_2": {
+      "Type": "OS::Quantum::RouterInterface",
+      "Properties": {
+        "router_id": { "Ref" : "ExternalRouterId" },
+        "subnet_id": { "Ref" : "app_subnet" }
+      }
+    },
+
+    "router_interface_3": {
+      "Type": "OS::Quantum::RouterInterface",
+      "Properties": {
+        "router_id": { "Ref" : "ExternalRouterId" },
+        "subnet_id": { "Ref" : "db_subnet" }
+      }
+    },
+
+    "DatabaseServer": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "config" : {
+            "packages" : {
+              "yum" : {
+                "mysql"        : [],
+                "mysql-server" : []
+              }
+            },
+            "services" : {
+              "systemd" : {
+                "mysqld"   : { "enabled" : "true", "ensureRunning" : "true" }
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "DistroArch2AMI", { "Ref" : "LinuxDistribution" },
+                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+        "InstanceType"   : { "Ref" : "InstanceType" },
+        "KeyName"        : { "Ref" : "KeyName" },
+	"SubnetId"       : { "Ref" : "db_subnet" },
+        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash -v\n",
+          "/opt/aws/bin/cfn-init\n",
+          "# Setup MySQL root password and create a user\n",
+          "mysqladmin -u root password '", { "Ref" : "DBRootPassword" }, "'\n",
+          "cat << EOF | mysql -u root --password='", { "Ref" : "DBRootPassword" }, "'\n",
+          "CREATE DATABASE ", { "Ref" : "DBName" }, ";\n",
+          "GRANT ALL PRIVILEGES ON ", { "Ref" : "DBName" }, ".* TO \"", { "Ref" : "DBUsername" }, "\"@\"%\"\n",
+          "IDENTIFIED BY \"", { "Ref" : "DBPassword" }, "\";\n",
+          "FLUSH PRIVILEGES;\n",
+          "EXIT\n",
+          "EOF\n"
+        ]]}}
+      }
+    },
+
+    "AppServer": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": "DatabaseServer",
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "config" : {
+            "packages" : {
+              "yum" : {
+                "httpd"        : [],
+                "wordpress"    : []
+              }
+            },
+            "services" : {
+              "systemd" : {
+                "httpd"    : { "enabled" : "true", "ensureRunning" : "true" }
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "DistroArch2AMI", { "Ref" : "LinuxDistribution" },
+                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+        "InstanceType"   : { "Ref" : "InstanceType" },
+        "KeyName"        : { "Ref" : "KeyName" },
+	"SubnetId"       : { "Ref" : "app_subnet" },
+        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash -v\n",
+          "/opt/aws/bin/cfn-init\n",
+          "sed -i \"/Deny from All/d\" /etc/httpd/conf.d/wordpress.conf\n",
+          "sed --in-place --e s/database_name_here/", { "Ref" : "DBName" }, "/ --e s/username_here/", { "Ref" : "DBUsername" }, "/ --e s/password_here/", { "Ref" : "DBPassword" }, "/ --e s/localhost/", { "Fn::GetAtt" : [ "DatabaseServer", "PublicIp" ]}, "/ /usr/share/wordpress/wp-config.php\n",
+          "systemctl restart httpd.service\n"
+        ]]}}
+      }
+    },
+    
+    "WebProxyServer": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "config": {
+            "packages": {
+              "yum": {
+                "haproxy"        : []
+              }
+            },
+            "services": {
+              "systemd": {
+                "haproxy"   : { "enabled": "true", "ensureRunning": "true" }
+              }
+            },
+            "files": {
+              "/etc/haproxy/haproxy.cfg": {
+                "content": { "Fn::Join": ["", [
+                "    global\n",
+                "        daemon\n",
+                "        maxconn 256\n",
+                "\n",
+                "    defaults\n",
+                "        mode http\n",
+                "        timeout connect 5000ms\n",
+                "        timeout client 50000ms\n",
+                "        timeout server 50000ms\n",
+                "\n",
+                "    frontend http-in\n",
+                "        bind *:80\n",
+                "        default_backend servers\n",
+                "\n",
+                "    backend servers\n",
+                "        balance roundrobin\n",
+                "        option http-server-close\n",
+                "        option forwardfor\n",
+                "        server server1 ", { "Fn::GetAtt" : [ "AppServer", "PublicIp" ]}, ":80\n"
+                ]]},
+                "mode": "000644",
+                "owner": "root",
+                "group": "root"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "DistroArch2AMI", { "Ref" : "LinuxDistribution" },
+                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+        "InstanceType": { "Ref": "InstanceType" },
+        "KeyName": { "Ref": "KeyName" },
+	"SubnetId" : { "Ref" : "web_subnet" },
+        "UserData": { "Fn::Base64": { "Fn::Join": ["", [
+          "#!/bin/bash -v\n",
+          "/opt/aws/bin/cfn-init -s ",
+          { "Ref": "AWS::StackName" },
+          "    --region ", { "Ref": "AWS::Region" }, "\n"
+        ]]}}
+      }
+    }
+  },
+
+  "Outputs" : {
+    "WordPressURL" : {
+      "Value" : { "Fn::Join" : ["", ["http://", { "Fn::GetAtt" : [ "WebProxyServer", "PublicIp" ]}, "/wordpress"]] },
+      "Description" : "URL for Wordpress wiki proxy"
+    }
+  }
+}
